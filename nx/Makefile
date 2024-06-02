@@ -12,7 +12,6 @@ export LIBNX_MAJOR	:= 4
 export LIBNX_MINOR	:= 7
 export LIBNX_PATCH	:= 0
 
-
 VERSION	:=	$(LIBNX_MAJOR).$(LIBNX_MINOR).$(LIBNX_PATCH)
 
 #---------------------------------------------------------------------------------

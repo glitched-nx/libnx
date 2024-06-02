@@ -625,7 +625,6 @@ Result hidsysLegacySetButtonConfigRight(HidsysUniquePadId unique_pad_id, const H
     return _hidsysCmdInU64InBufFixedNoOut(unique_pad_id.id, config, sizeof(*config), 1207);
 }
 
-Result hidsysSetButtonConfigRight(BtdrvAddress addr, const HidsysButtonConfigRight *config) {
     if (!hosversionBetween(11,18))
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
