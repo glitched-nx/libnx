@@ -553,6 +553,8 @@ Result fsGetRightsIdByPath(const char* path, FsRightsId* out_rights_id);
 /// Retrieves the rights id and key generation corresponding to the content path. Only available on [3.0.0+], attr is ignored before [16.0.0].
 Result fsGetRightsIdAndKeyGenerationByPath(const char* path, FsContentAttributes attr, u8* out_key_generation, FsRightsId* out_rights_id);
 
+Result fsGetContentStorageInfoIndex(s32 *out); ///< [19.0.0+]
+
 Result fsDisableAutoSaveDataCreation(void);
 
 Result fsSetGlobalAccessLogMode(u32 mode);
@@ -683,7 +685,7 @@ Result fsDeviceOperatorIsGameCardInserted(FsDeviceOperator* d, bool* out);
 Result fsDeviceOperatorGetGameCardHandle(FsDeviceOperator* d, FsGameCardHandle* out);
 Result fsDeviceOperatorGetGameCardUpdatePartitionInfo(FsDeviceOperator* d, const FsGameCardHandle* handle, FsGameCardUpdatePartitionInfo* out);
 Result fsDeviceOperatorGetGameCardAttribute(FsDeviceOperator* d, const FsGameCardHandle* handle, u8 *out);
-Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator* d, const FsGameCardHandle* handle, void* dst, size_t dst_size, s64 size);
+Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator* d, const FsGameCardHandle* handle, void* dst, size_t dst_size, s64* out_size, s64 size);
 Result fsDeviceOperatorGetGameCardIdSet(FsDeviceOperator* d, void* dst, size_t dst_size, s64 size);
 Result fsDeviceOperatorGetGameCardErrorReportInfo(FsDeviceOperator* d, FsGameCardErrorReportInfo* out);
 Result fsDeviceOperatorGetGameCardDeviceId(FsDeviceOperator* d, void* dst, size_t dst_size, s64 size);
