@@ -229,7 +229,7 @@ typedef enum {
 } SetSysTouchScreenMode;
 
 /// BlockType
-typedef enum {
+typedef enum PACKED {
     SetSysBlockType_Audio           = 1,
     SetSysBlockType_Video           = 2,
     SetSysBlockType_VendorSpecific  = 3,
