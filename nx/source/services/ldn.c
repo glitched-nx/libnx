@@ -50,26 +50,26 @@ Service* ldnmGetServiceSession_MonitorService(void) {
     return &g_ldnmSrv;
 }
 
-Result ldnmGetStateForMonitor(LdnState *out) {
+Result ldnmGetState(LdnState *out) {
     u32 tmp=0;
     Result rc = _ldnCmdNoInOutU32(&g_ldnmSrv, &tmp, 0);
     if (R_SUCCEEDED(rc) && out) *out = tmp;
     return rc;
 }
 
-Result ldnmGetNetworkInfoForMonitor(LdnNetworkInfo *out) {
+Result ldnmGetNetworkInfo(LdnNetworkInfo *out) {
     return _ldnGetNetworkInfo(&g_ldnmSrv, out);
 }
 
-Result ldnmGetIpv4AddressForMonitor(LdnIpv4Address *addr, LdnSubnetMask *mask) {
+Result ldnmGetIpv4Address(LdnIpv4Address *addr, LdnSubnetMask *mask) {
     return _ldnGetIpv4Address(&g_ldnmSrv, addr, mask);
 }
 
-Result ldnmGetSecurityParameterForMonitor(LdnSecurityParameter *out) {
+Result ldnmGetSecurityParameter(LdnSecurityParameter *out) {
     return _ldnGetSecurityParameter(&g_ldnmSrv, out);
 }
 
-Result ldnmGetNetworkConfigForMonitor(LdnNetworkConfig *out) {
+Result ldnmGetNetworkConfig(LdnNetworkConfig *out) {
     return _ldnGetNetworkConfig(&g_ldnmSrv, out);
 }
 
@@ -137,6 +137,10 @@ static Result _ldnCmdNoIO(Service* srv, u32 cmd_id) {
 }
 
 static Result _ldnCmdInU32NoOut(Service* srv, u32 in, u32 cmd_id) {
+    return serviceDispatchIn(srv, cmd_id, in);
+}
+
+static Result _ldnCmdInU16NoOut(Service* srv, u16 in, u32 cmd_id) {
     return serviceDispatchIn(srv, cmd_id, in);
 }
 
@@ -219,11 +223,31 @@ static Result _ldnScan(s32 channel, const LdnScanFilter *filter, LdnNetworkInfo 
 static void _ldnCopyNetworkConfig(const LdnNetworkConfig *in, LdnNetworkConfig *out) {
     memset(out, 0, sizeof(*out));
 
-    out->local_communication_id = in->local_communication_id;
-    out->userdata_filter = in->userdata_filter;
-    out->network_channel = in->network_channel;
-    out->participant_max = in->participant_max;
+    out->intent_id.local_communication_id = in->intent_id.local_communication_id;
+    out->intent_id.scene_id = in->intent_id.scene_id;
+    out->channel = in->channel;
+    out->node_count_max = in->node_count_max;
     out->local_communication_version = in->local_communication_version;
+}
+
+static s16 _ldnChannelToOldBand(s16 channel) {
+    if (channel < 15) return 24;
+    else return 50;
+}
+
+static u16 _ldnChannelToChannelBand(s16 channel) {
+    if (!channel) return channel;
+    u16 tmp_channel = channel & 0x3FF; // Official sw just masks with u16.
+
+    u16 band = 0x3F; // Invalid
+    if (tmp_channel < 15) band = 2;
+    else if (tmp_channel >= 32 && tmp_channel < 178) band = 5;
+
+    return channel | (band<<10);
+}
+
+static s16 _ldnChannelBandToChannel(u16 val) {
+    return val & 0x3FF;
 }
 
 Result ldnGetState(LdnState *out) {
@@ -253,11 +277,11 @@ Result ldnGetNetworkConfig(LdnNetworkConfig *out) {
     return _ldnGetNetworkConfig(&g_ldnSrv, out);
 }
 
-Result ldnAttachStateChangeEvent(Event* out_event) {
+Result ldnGetStateChangeEvent(Event* out_event) {
     return _ldnCmdGetEvent(&g_ldnSrv, out_event, true, 100);
 }
 
-Result ldnGetNetworkInfoLatestUpdate(LdnNetworkInfo *network_info, LdnNodeLatestUpdate *nodes, s32 count) {
+Result ldnGetNetworkInfoAndHistory(LdnNetworkInfo *network_info, LdnNodeLatestUpdate *nodes, s32 count) {
     return serviceDispatch(&g_ldnSrv, 101,
         .buffer_attrs = {
             SfBufferAttr_FixedSize | SfBufferAttr_HipcPointer | SfBufferAttr_Out,
@@ -289,6 +313,13 @@ Result ldnSetWirelessControllerRestriction(LdnWirelessControllerRestriction rest
     return _ldnCmdInU32NoOut(&g_ldnSrv, restriction, 104);
 }
 
+Result ldnSetProtocol(LdnProtocol protocol) {
+    if (hosversionBefore(18,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _ldnCmdInU32NoOut(&g_ldnSrv, protocol, 106);
+}
+
 Result ldnOpenAccessPoint(void) {
     return _ldnCmdNoIO(&g_ldnSrv, 200);
 }
@@ -300,7 +331,7 @@ Result ldnCloseAccessPoint(void) {
 Result ldnCreateNetwork(const LdnSecurityConfig *sec_config, const LdnUserConfig *user_config, const LdnNetworkConfig *network_config) {
     LdnNetworkConfig tmp_network_config;
     LdnUserConfig tmp_user={0};
-    memcpy(tmp_user.nickname, user_config->nickname, sizeof(tmp_user.nickname));
+    memcpy(tmp_user.user_name, user_config->user_name, sizeof(tmp_user.user_name)-1);
     _ldnCopyNetworkConfig(network_config, &tmp_network_config);
 
     const struct {
@@ -316,7 +347,7 @@ Result ldnCreateNetwork(const LdnSecurityConfig *sec_config, const LdnUserConfig
 Result ldnCreateNetworkPrivate(const LdnSecurityConfig *sec_config, const LdnSecurityParameter *sec_param, const LdnUserConfig *user_config, const LdnNetworkConfig *network_config, const LdnAddressEntry *addrs, s32 count) {
     LdnNetworkConfig tmp_network_config;
     LdnUserConfig tmp_user={0};
-    memcpy(tmp_user.nickname, user_config->nickname, sizeof(tmp_user.nickname));
+    memcpy(tmp_user.user_name, user_config->user_name, sizeof(tmp_user.user_name)-1);
     _ldnCopyNetworkConfig(network_config, &tmp_network_config);
 
     const struct {
@@ -371,7 +402,7 @@ Result ldnCloseStation(void) {
 
 Result ldnConnect(const LdnSecurityConfig *sec_config, const LdnUserConfig *user_config, s32 version, u32 option, const LdnNetworkInfo *network_info) {
     LdnUserConfig tmp_user={0};
-    memcpy(tmp_user.nickname, user_config->nickname, sizeof(tmp_user.nickname));
+    memcpy(tmp_user.user_name, user_config->user_name, sizeof(tmp_user.user_name)-1);
 
     const struct {
         LdnSecurityConfig sec_config;
@@ -389,7 +420,7 @@ Result ldnConnect(const LdnSecurityConfig *sec_config, const LdnUserConfig *user
 Result ldnConnectPrivate(const LdnSecurityConfig *sec_config, const LdnSecurityParameter *sec_param, const LdnUserConfig *user_config, s32 version, u32 option, const LdnNetworkConfig *network_config) {
     LdnNetworkConfig tmp_network_config;
     LdnUserConfig tmp_user={0};
-    memcpy(tmp_user.nickname, user_config->nickname, sizeof(tmp_user.nickname));
+    memcpy(tmp_user.user_name, user_config->user_name, sizeof(tmp_user.user_name)-1);
     _ldnCopyNetworkConfig(network_config, &tmp_network_config);
 
     const struct {
@@ -417,5 +448,134 @@ Result ldnSetOperationMode(LdnOperationMode mode) {
         return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
 
     return _ldnCmdInU32NoOut(&g_ldnSrv, mode, 402);
+}
+
+Result ldnEnableActionFrame(const LdnActionFrameSettings *settings) {
+    if (!serviceIsActive(&g_ldnSrv) || g_ldnServiceType != LdnServiceType_System)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    if (hosversionBefore(18,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return serviceDispatchIn(&g_ldnSrv, 500, *settings);
+}
+
+Result ldnDisableActionFrame(void) {
+    if (!serviceIsActive(&g_ldnSrv) || g_ldnServiceType != LdnServiceType_System)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    if (hosversionBefore(18,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _ldnCmdNoIO(&g_ldnSrv, 501);
+}
+
+Result ldnSendActionFrame(const void* data, size_t size, LdnMacAddress destination, LdnMacAddress bssid, s16 channel, u32 flags) {
+    if (!serviceIsActive(&g_ldnSrv) || g_ldnServiceType != LdnServiceType_System)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    if (hosversionBefore(18,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    s16 tmp_band = 0, tmp_channel = 0;
+    if (hosversionBefore(20,0,0)) {
+        tmp_channel = channel;
+        tmp_band = _ldnChannelToOldBand(channel);
+    }
+    else
+        tmp_band = _ldnChannelToChannelBand(channel);
+
+    const struct {
+        LdnMacAddress destination;
+        LdnMacAddress bssid;
+        s16 band; // These are a single u16 with [20.0.0+].
+        s16 channel;
+        u32 flags;
+    } in = { destination, bssid, tmp_band, tmp_channel, flags};
+
+    return serviceDispatchIn(&g_ldnSrv, 502, in,
+        .buffer_attrs = { SfBufferAttr_HipcAutoSelect | SfBufferAttr_In },
+        .buffers = { { data, size } },
+    );
+}
+
+Result ldnRecvActionFrame(void* data, size_t size, LdnMacAddress *addr0, LdnMacAddress *addr1, s16 *channel, u32 *out_size, s32 *link_level, u32 flags) {
+    if (!serviceIsActive(&g_ldnSrv) || g_ldnServiceType != LdnServiceType_System)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    if (hosversionBefore(18,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    struct {
+        LdnMacAddress addr0;
+        LdnMacAddress addr1;
+        s16 band; // These are a single u16 with [20.0.0+].
+        s16 channel;
+        u32 size;
+        s32 link_level;
+    } out;
+
+    Result rc = serviceDispatchInOut(&g_ldnSrv, 503, flags, out,
+        .buffer_attrs = { SfBufferAttr_HipcAutoSelect | SfBufferAttr_Out },
+        .buffers = { { data, size } },
+    );
+    if (R_SUCCEEDED(rc)) {
+        if (addr0) *addr0 = out.addr0;
+        if (addr1) *addr1 = out.addr1;
+        if (channel) {
+            if (hosversionBefore(20,0,0))
+                *channel = out.channel;
+            else
+                *channel = _ldnChannelBandToChannel(out.band);
+        }
+        if (out_size) *out_size = out.size;
+        if (link_level) *link_level = out.link_level;
+    }
+    return rc;
+}
+
+Result ldnSetHomeChannel(s16 channel) {
+    if (!serviceIsActive(&g_ldnSrv) || g_ldnServiceType != LdnServiceType_System)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    if (hosversionBefore(18,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    s16 tmp_band = 0, tmp_channel = 0;
+    if (hosversionBefore(20,0,0)) {
+        tmp_channel = channel;
+        tmp_band = _ldnChannelToOldBand(channel);
+
+        const struct {
+            s16 band;
+            s16 channel;
+        } in = { tmp_band, tmp_channel };
+
+        return serviceDispatchIn(&g_ldnSrv, 505, in);
+    }
+    else
+        tmp_band = _ldnChannelToChannelBand(channel);
+
+    return _ldnCmdInU16NoOut(&g_ldnSrv, tmp_band, 505);
+}
+
+Result ldnSetTxPower(s16 power) {
+    if (!serviceIsActive(&g_ldnSrv) || g_ldnServiceType != LdnServiceType_System)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    if (hosversionBefore(18,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _ldnCmdInU16NoOut(&g_ldnSrv, power, 600);
+}
+
+Result ldnResetTxPower(void) {
+    if (!serviceIsActive(&g_ldnSrv) || g_ldnServiceType != LdnServiceType_System)
+        return MAKERESULT(Module_Libnx, LibnxError_NotInitialized);
+
+    if (hosversionBefore(18,0,0))
+        return MAKERESULT(Module_Libnx, LibnxError_IncompatSysVer);
+
+    return _ldnCmdNoIO(&g_ldnSrv, 601);
 }
 
