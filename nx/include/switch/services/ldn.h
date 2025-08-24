@@ -10,6 +10,9 @@
 #include "../sf/service.h"
 #include "../kernel/event.h"
 
+#define LDN_PRIORITY_SYSTEM 0x38       ///< System priority for __nx_ldn_priority.
+#define LDN_PRIORITY_USER 0x5A         ///< User priority for __nx_ldn_priority.
+
 typedef enum {
     LdnServiceType_User           = 0, ///< Initializes ldn:u.
     LdnServiceType_System         = 1, ///< Initializes ldn:s.
@@ -276,6 +279,7 @@ Result ldnmGetNetworkConfig(LdnNetworkConfig *out);
 ///@{
 
 /// Initialize ldn.
+/// The priority is only used with ::LdnServiceType_System on [19.0.0+]. To optionally set this, define "s32 __nx_ldn_priority". The priority must be \ref LDN_PRIORITY_SYSTEM (default) or \ref LDN_PRIORITY_USER.
 Result ldnInitialize(LdnServiceType service_type);
 
 /// Exit ldn.
@@ -283,6 +287,9 @@ void ldnExit(void);
 
 /// Gets the Service object for IUserLocalCommunicationService/ISystemLocalCommunicationService.
 Service* ldnGetServiceSession_LocalCommunicationService(void);
+
+/// Gets the Service object for IClientProcessMonitor, only valid with [18.0.0+].
+Service* ldnGetServiceSession_IClientProcessMonitor(void);
 
 /**
  * @brief GetState
@@ -373,6 +380,7 @@ Result ldnSetWirelessControllerRestriction(LdnWirelessControllerRestriction rest
  * @brief SetProtocol
  * @note This is only usable with [20.0.0+] (with [18.0.0-19-0.1] this is available but not usable).
  * @note \ref LdnState must be ::LdnState_Initialized. If a non-default Protocol is wanted, use this after \ref ldnInitialize.
+ * @note This is used by \ref ldnInitialize with LdnProtocol_NX on [20.0.0+].
  * @param[in] protocol \ref LdnProtocol
  */
 Result ldnSetProtocol(LdnProtocol protocol);
@@ -501,8 +509,8 @@ Result ldnDisconnect(void);
 
 /**
  * @brief SetOperationMode
- * @note Only available on [4.0.0+].
- * @note Only available with ::LdnServiceType_System.
+ * @note With ::LdnServiceType_System this is only available on [4.0.0+].
+ * @note With ::LdnServiceType_User this is only available on [19.0.0+].
  * @note \ref LdnState must be ::LdnState_Initialized.
  * @param[in] mode \ref LdnOperationMode
  */
